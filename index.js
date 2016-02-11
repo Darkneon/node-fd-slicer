@@ -27,6 +27,10 @@ function FdSlicer(fd, options) {
 FdSlicer.prototype.read = function(buffer, offset, length, position, callback) {
   var self = this;
   self.pend.go(function(cb) {
+    if (isNil(self.fd)) {
+      cb();
+      return callback(new Error('Cannot read. fd is missing'));        
+    }      
     fs.read(self.fd, buffer, offset, length, position, function(err, bytesRead, buffer) {
       cb();
       callback(err, bytesRead, buffer);
@@ -37,6 +41,10 @@ FdSlicer.prototype.read = function(buffer, offset, length, position, callback) {
 FdSlicer.prototype.write = function(buffer, offset, length, position, callback) {
   var self = this;
   self.pend.go(function(cb) {
+    if (isNil(self.fd)) {
+      cb();
+      return callback(new Error('Cannot write. fd is missing'));        
+    }    
     fs.write(self.fd, buffer, offset, length, position, function(err, written, buffer) {
       cb();
       callback(err, written, buffer);
@@ -64,7 +72,11 @@ FdSlicer.prototype.unref = function() {
   if (self.refCount < 0) throw new Error("invalid unref");
 
   if (self.autoClose) {
-    fs.close(self.fd, onCloseDone);
+    if (!isNil(self.fd)) {  
+      fs.close(self.fd, onCloseDone);
+    } else {
+      onCloseDone(new Error('Cannot close. fd is missing'));
+    }   
   }
 
   function onCloseDone(err) {
@@ -105,7 +117,7 @@ ReadStream.prototype._read = function(n) {
     return;
   }
   self.context.pend.go(function(cb) {
-    if (self.destroyed) return cb();
+    if (self.destroyed || isNil(self.context.fd)) return cb();
     var buffer = new Buffer(toRead);
     fs.read(self.context.fd, buffer, 0, toRead, self.pos, function(err, bytesRead) {
       if (err) {
@@ -160,7 +172,7 @@ WriteStream.prototype._write = function(buffer, encoding, callback) {
     return;
   }
   self.context.pend.go(function(cb) {
-    if (self.destroyed) return cb();
+    if (self.destroyed || isNil(self.context.fd)) return cb();
     fs.write(self.context.fd, buffer, 0, buffer.length, self.pos, function(err, bytes) {
       if (err) {
         self.destroy();
@@ -274,4 +286,8 @@ function createFromBuffer(buffer) {
 
 function createFromFd(fd, options) {
   return new FdSlicer(fd, options);
+}
+
+function isNil(value) {
+    return value == null;
 }
